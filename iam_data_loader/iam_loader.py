@@ -24,7 +24,7 @@ def main_loader(set, level):
     for i, (img_path, transcr) in enumerate(info):
 
         if i % 1000 == 0:
-            print('Docs: [{}/{} ({:.0f}%)]'.format(i, len(info), 100. * i / len(info)))
+            print('imgs: [{}/{} ({:.0f}%)]'.format(i, len(info), 100. * i / len(info)))
 
         try:
             img = img_io.imread(img_path + '.png')
@@ -43,7 +43,6 @@ class IAMLoader(Dataset):
 
         self.fixed_size = fixed_size
 
-        set = 'train'
         save_file = dataset_path + '/' + set + '_' + level + '.pt'
 
         if isfile(save_file) is False:
@@ -72,6 +71,10 @@ class IAMLoader(Dataset):
 
         nheight = self.fixed_size[0]
         nwidth = self.fixed_size[1]
+        if nheight is None:
+            nheight = img.shape[0]
+        if nwidth is None:
+            nwidth = int(np.random.uniform(.8, 1.2) * img.shape[1] * nheight / img.shape[0])
         img = torch.Tensor(image_resize(img, height=nheight, width=nwidth)).float().unsqueeze(0)
 
         return img, transcr

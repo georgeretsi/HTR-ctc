@@ -20,6 +20,8 @@ from models.htr_net import HTRNet
 
 from utils.save_load import my_torch_save, my_torch_load
 
+from utils.auxilary_functions import torch_augm
+
 from os.path import isfile
 
 import torch.nn.functional as F
@@ -98,6 +100,8 @@ def train():
     for iter_idx, (img, transcr) in enumerate(train_loader):
 
         img = Variable(img.cuda(gpu_id))
+        # cuda augm - alternatively for cpu use it on dataloader
+        img = torch_augm(img)
         output = net(img)
 
         act_lens = torch.IntTensor(img.size(0)*[output.size(0)])
