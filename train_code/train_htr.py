@@ -72,6 +72,7 @@ test_set = IAMLoader('test', level='line', fixed_size=(128, None))
 
 # augmentation using data sampler
 train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=8)
+test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=8)
 
 
 # load CNN
@@ -90,7 +91,7 @@ nlr = args.learning_rate
 optimizer = torch.optim.Adam(net_parameters, nlr, weight_decay=0.00005)
 scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [50, 80])
 
-decoder = ctcdecode.CTCBeamDecoder([c for c in classes], beam_width=10)
+decoder = ctcdecode.CTCBeamDecoder([c for c in classes], beam_width=100)
 # decoder = ctcdecode.
 
 def train():
@@ -131,9 +132,33 @@ def train():
 
             print('orig:: ' + tst_transcr)
             tt = [v for j, v in enumerate(tdec) if j == 0 or v != tdec[j - 1]]
-            print('dec:: ' + ''.join([icdict[t] for t in tt]))
-            #decoder.decode(output.softmax(2).permute(1, 0, 2))
+            print('greedy dec:: ' + ''.join([icdict[t] for t in tt]).replace('_', ''))
+            tdec, _, _, tdec_len = decoder.decode(tst_o.softmax(2).permute(1, 0, 2))
+            print('beam dec:: ' + ''.join([icdict[t.item()] for t in tdec[0, 0][:tdec_len[0, 0].item()]]))
 
+import editdistance
+# slow implementation
+def test(epoch):
+    net.eval()
+
+    logger.info('Testing at epoch %d', epoch)
+    cer, wer = [], []
+    for (img, transcr) in test_loader:
+        transcr = transcr[0]
+        img = Variable(img.cuda(gpu_id))
+        with torch.no_grad():
+            o = net(img)
+        tdec, _, _, tdec_len = decoder.decode(o.softmax(2).permute(1, 0, 2))
+        dec_transcr = ''.join([icdict[t.item()] for t in tdec[0, 0][:tdec_len[0, 0].item()]])
+
+        cer += [float(editdistance.eval(dec_transcr, transcr))/ len(transcr)]
+        wer += [float(editdistance.eval(dec_transcr.split(' '), transcr.split(' '))) / len(transcr.split(' '))]
+
+    logger.info('CER at epoch %d: %f', epoch, sum(cer) / len(cer))
+    logger.info('WER at epoch %d: %f', epoch, sum(wer) / len(wer))
+
+
+    net.train()
 
 
 cnt = 0
@@ -142,6 +167,9 @@ for epoch in range(1, max_epochs + 1):
 
     scheduler.step()
     train()
+
+    if epoch % 5 == 0:
+        test(epoch)
 
     if epoch % 10 == 0:
         logger.info('Saving net after %d epochs', epoch)

@@ -75,6 +75,9 @@ class IAMLoader(Dataset):
             nheight = img.shape[0]
         if nwidth is None:
             nwidth = int(np.random.uniform(.8, 1.2) * img.shape[1] * nheight / img.shape[0])
-        img = torch.Tensor(image_resize(img, height=nheight, width=nwidth)).float().unsqueeze(0)
+
+        img = image_resize(img, height=nheight, width=nwidth)
+        img = centered(img, (nheight, int(1.2 * nwidth) +32))
+        img = torch.Tensor(img).float().unsqueeze(0)
 
         return img, transcr

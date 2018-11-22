@@ -96,9 +96,9 @@ def tps_deform(grid, cpoints, tps_w):
 
     return ngrid
 
-def deform(img):
+def deform_old(img):
     h, w = img.size(2), img.size(3)
-    gh, gw = max(3, 1 + int(np.ceil(h / 32.0))), max(5, 1 + int(np.ceil(w / 32.0)))
+    gh, gw = max(4, 1 + int(np.ceil(h / 32.0))), max(8, 1 + int(np.ceil(w / 64.0)))
     g = torch.stack([
         torch.linspace(-1, 1, gw).view(1, -1).repeat(gh, 1),
         torch.linspace(-1, 1, gh).view(-1, 1).repeat(1, gw),
@@ -124,6 +124,42 @@ def deform(img):
     tps_w = tps_parameters(ng.view(-1, 2), g.view(-1, 2))
 
     #h, w = 8 * (int(round(1.2 * scale * template.size(1))) / 8), 8 * (int(round(1.2 * scale * template.size(2))) / 8)
+
+    dscale = 4
+    ig = torch.stack([
+        torch.linspace(- 1.0, 1.0, w/dscale).view(1, -1).repeat(h/dscale, 1),
+        torch.linspace(- 1.0, 1.0, h/dscale).view(-1, 1).repeat(1, w/dscale),
+    ], 2).to(img.device)
+    nig = tps_deform(ig.view(-1, 2), ng.view(-1, 2).to(img.device), tps_w.to(img.device)).view_as(ig)
+    nig = F.upsample_bilinear(nig.unsqueeze(0).permute(3, 0, 1, 2), (h, w)).permute(1, 2, 3, 0)
+
+    nimg = F.grid_sample(img, nig, padding_mode='border')
+
+    return nimg
+
+def deform(img, alpha=1.0):
+    h, w = img.size(2), img.size(3)
+    gh, gw = max(4, int(np.ceil(h / 32.0))), max(8, int(np.ceil(w / 32.0)))
+    ws = torch.linspace(-1, 1, gw+1)
+    ws = .5*(ws[1:] + ws[:-1])
+    hs = torch.linspace(-1, 1, gh + 1)
+    hs = .5 * (hs[1:] + hs[:-1])
+    g = torch.stack([
+        ws.view(1, -1).repeat(gh, 1),
+        hs.view(-1, 1).repeat(1, gw),
+    ], 2)
+
+    scale = np.random.uniform(.9, 1.1)
+    x_prop = np.random.uniform(.9, 1.1)
+
+    # smoothed changes
+    dx = F.conv2d(torch.randn((gh, gw)).view((1, 1, gh, gw)), torch.ones((1, 1, 3, 3))/9, padding=1).squeeze()
+    dy = F.conv2d(torch.randn((gh, gw)).view((1, 1, gh, gw)), torch.ones((1, 1, 3, 3))/9, padding=1).squeeze()
+    ng = scale * g
+    ng[:, :, 0] = x_prop * ng[:, :, 0] + (alpha / gw * scale) * dx
+    ng[:, :, 1] = ng[:, :, 1] + (alpha / gh * scale) * dy
+
+    tps_w = tps_parameters(ng.view(-1, 2), g.view(-1, 2))
 
     dscale = 4
     ig = torch.stack([
