@@ -176,7 +176,7 @@ def deform(img, alpha=1.0):
 def torch_augm(img):
 
     # kernel radius
-    r = np.random.randint(0, 4)
+    r = np.random.randint(0, 3)
     if r > 0:
         mode = np.random.choice(['dilation', 'erosion', 'opening', 'closing'])
         img = torch_morphological(img, 2*r+1, mode)

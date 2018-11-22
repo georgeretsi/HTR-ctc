@@ -89,12 +89,12 @@ loss = warp_ctc.CTCLoss()
 net_parameters = net.parameters()
 nlr = args.learning_rate
 optimizer = torch.optim.Adam(net_parameters, nlr, weight_decay=0.00005)
-scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [50, 80])
+scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [int(.5 * max_epochs), int(.75 * max_epochs)])
 
 decoder = ctcdecode.CTCBeamDecoder([c for c in classes], beam_width=100)
 # decoder = ctcdecode.
 
-def train():
+def train(epoch):
     optimizer.zero_grad()
 
     closs = []
@@ -121,7 +121,7 @@ def train():
 
         # mean runing errors??
         if iter_idx % (args.display*iter_size) == (args.display*iter_size)-1:
-            logger.info('Iteration %d: %f', iter_idx+1, sum(closs)/len(closs))
+            logger.info('Epoch %d, Iteration %d: %f', epoch, iter_idx+1, sum(closs)/len(closs))
             closs = []
 
             tst_img, tst_transcr = test_set.__getitem__(np.random.randint(test_set.__len__()))
@@ -148,8 +148,11 @@ def test(epoch):
         img = Variable(img.cuda(gpu_id))
         with torch.no_grad():
             o = net(img)
-        tdec, _, _, tdec_len = decoder.decode(o.softmax(2).permute(1, 0, 2))
-        dec_transcr = ''.join([icdict[t.item()] for t in tdec[0, 0][:tdec_len[0, 0].item()]])
+        tdec = o.argmax(2).permute(1, 0).cpu().numpy().squeeze()
+        tt = [v for j, v in enumerate(tdec) if j == 0 or v != tdec[j - 1]]
+        dec_transcr = ''.join([icdict[t] for t in tt]).replace('_', '')
+        #tdec, _, _, tdec_len = decoder.decode(o.softmax(2).permute(1, 0, 2))
+        #dec_transcr = ''.join([icdict[t.item()] for t in tdec[0, 0][:tdec_len[0, 0].item()]])
 
         cer += [float(editdistance.eval(dec_transcr, transcr))/ len(transcr)]
         wer += [float(editdistance.eval(dec_transcr.split(' '), transcr.split(' '))) / len(transcr.split(' '))]
@@ -166,7 +169,7 @@ logger.info('Training:')
 for epoch in range(1, max_epochs + 1):
 
     scheduler.step()
-    train()
+    train(epoch)
 
     if epoch % 5 == 0:
         test(epoch)
