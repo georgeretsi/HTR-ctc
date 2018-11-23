@@ -139,7 +139,8 @@ def deform_old(img):
 
 def deform(img, alpha=1.0):
     h, w = img.size(2), img.size(3)
-    gh, gw = max(4, int(np.ceil(h / 32.0))), max(8, int(np.ceil(w / 32.0)))
+    gh, gw = max(5, int(np.ceil(h / 32.0))), max(9, int(np.ceil(w / 32.0)))
+    gh, gw = 2 * (gh/2) +1, 2* (gw/2) + 1
     ws = torch.linspace(-1, 1, gw+1)
     ws = .5*(ws[1:] + ws[:-1])
     hs = torch.linspace(-1, 1, gh + 1)
@@ -149,14 +150,34 @@ def deform(img, alpha=1.0):
         hs.view(-1, 1).repeat(1, gw),
     ], 2)
 
-    scale = np.random.uniform(.9, 1.1)
-    x_prop = np.random.uniform(.9, 1.1)
+    scale = 1.0 #np.random.uniform(.9, 1.1)
+    x_prop = 1.0 #np.random.uniform(.9, 1.1)
 
     # smoothed changes
-    dx = F.conv2d(torch.randn((gh, gw)).view((1, 1, gh, gw)), torch.ones((1, 1, 3, 3))/9, padding=1).squeeze()
-    dy = F.conv2d(torch.randn((gh, gw)).view((1, 1, gh, gw)), torch.ones((1, 1, 3, 3))/9, padding=1).squeeze()
+
+    ww = torch.Tensor([.25, .5, 1.0, .5, .25])
+    #angle
+    x_a = 5 * F.conv2d(torch.randn((1, gw)).view((1, 1, 1, gw)), ww.view(1, 1, 1, -1)/ww.sum(), padding=(0, len(ww)/2)).view(1, gw)
+    #translation
+    x_t = 2 * F.conv2d(1 - 2 * torch.rand((1, gw)).view((1, 1, 1, gw)), ww.view(1, 1, 1, -1)/ww.sum(), padding=(0, len(ww)/2)).view(1, gw)
+    ytmp = torch.linspace(-1, 1, gh)
+    dx = []
+    for i in range(gh):
+        dx += [x_t + ytmp[i] * x_a]
+    dx = torch.cat(dx, 0)
+
+    x_t = 2 * F.conv2d(torch.randn((1, gw)).view((1, 1, 1, gw)), ww.view(1, 1, 1, -1) / ww.sum(),
+                       padding=(0, len(ww) / 2)).view(1, gw)
+    #y_base = F.conv2d(torch.randn((gh, 1)).view((1, 1, gh, 1)), torch.ones((1, 1, 3, 1)) / 3, padding=(1, 0)).view(gh, 1)
+    dy = []
+    for i in range(gh):
+        dy += [x_t]
+    dy = torch.cat(dy, 0)
+
+    #dx = F.conv2d(torch.randn((gh, gw)).view((1, 1, gh, gw)), torch.ones((1, 1, 3, 3))/9, padding=1).squeeze()
+    #dy = F.conv2d(torch.randn((gh, gw)).view((1, 1, gh, gw)), torch.ones((1, 1, 3, 3))/9, padding=1).squeeze()
     ng = scale * g
-    ng[:, :, 0] = x_prop * ng[:, :, 0] + (alpha / gw * scale) * dx
+    ng[:, :, 0] = x_prop * ng[:, :, 0] + (alpha / gw) * dx
     ng[:, :, 1] = ng[:, :, 1] + (alpha / gh * scale) * dy
 
     tps_w = tps_parameters(ng.view(-1, 2), g.view(-1, 2))
@@ -181,7 +202,7 @@ def torch_augm(img):
         mode = np.random.choice(['dilation', 'erosion', 'opening', 'closing'])
         img = torch_morphological(img, 2*r+1, mode)
 
-    deform(img)
+    img = deform(img, np.random.uniform(.5, 1.0))
 
     return img.detach()
 

@@ -36,7 +36,6 @@ def main_loader(set, level):
 
     return data
 
-
 class IAMLoader(Dataset):
 
     def __init__(self, set, level='word', fixed_size=(128, None)):
@@ -66,6 +65,7 @@ class IAMLoader(Dataset):
         img = self.data[index][0]
         transcr = self.data[index][1]
 
+
         # add augmentation
         # ?? elastic, morphology, resizing
 
@@ -76,8 +76,8 @@ class IAMLoader(Dataset):
         if nwidth is None:
             nwidth = int(np.random.uniform(.8, 1.2) * img.shape[1] * nheight / img.shape[0])
 
-        img = image_resize(img, height=nheight, width=nwidth)
-        img = centered(img, (nheight, int(1.2 * nwidth) +32))
+        img = image_resize(img, height=nheight-16, width=nwidth)
+        img = centered(img, (nheight, int(1.2 * nwidth) + 32))
         img = torch.Tensor(img).float().unsqueeze(0)
 
         return img, transcr
