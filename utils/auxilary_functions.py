@@ -6,16 +6,6 @@ import torch
 import torch.nn.functional as F
 
 
-def grd_mgn(img):
-
-    sobel = torch.tensor([[1, 2, 1], [0, 0, 0], [-1, -2, -1]]).float().to(img.device)
-    gy = F.conv2d(img, sobel.view(1, 1, 3, 3), padding=1)
-    gx = F.conv2d(img, sobel.t().view(1, 1, 3, 3), padding=1)
-    mgn = torch.sqrt(gx ** 2 + gy ** 2)
-
-    return mgn
-
-
 # morphological operations suppurted by cuda
 def torch_morphological(img, kernel_size, mode='dilation'):
 
@@ -33,68 +23,6 @@ def torch_morphological(img, kernel_size, mode='dilation'):
 
     return img
 
-def pairwise_radial_basis(x, c, eps=.00001):
-
-    dd2 = (x.view(-1, 1, 2) - c.view(1, -1, 2)) ** 2
-    D = dd2[:, :, 0] + dd2[:, :, 1]
-    #D = F.pairwise_distance(x, c)
-    # > 1
-    #Phi = (D ** 2) * (D+eps).log()
-    # < 1
-    #Phi = D * (D ** D + eps).log()
-
-    Phi = .5 * D * (D + eps).log()
-
-    return Phi
-
-
-def tps_parameters(X, Y, l=0.01):
-
-    # X : control points, n x 2
-    # Y : target points, n x 2
-
-    dev = X.device
-    n = X.size(0)
-    d = X.size(1)
-
-    # A: n x n
-    A = pairwise_radial_basis(X, X) + l * torch.eye(n, n).to(dev)
-
-
-    # Xa : n x 3
-
-    aux_ones = torch.ones(n, 1).to(dev)
-    Xa = torch.cat([X, aux_ones], 1)
-
-    # M = [A Xa ; Xa^T 0] : (n+3) x (n+3)
-    M = torch.cat([torch.cat([A, Xa], 1), torch.cat([Xa.t(), torch.zeros(d+1, d+1).to(dev)],1)], 0)
-
-
-    # Ya : (n+3) x 3
-    aux_zeros = torch.zeros(d + 1, d + 1).to(dev)
-    Ya = torch.cat([torch.cat([Y, aux_ones], 1), aux_zeros], 0)
-
-    # w : (n+3) x 3
-    w = torch.mm(torch.inverse(M + .1 * torch.eye(n+d+1, n+d+1).to(dev)), Ya)
-
-    #M_LU = torch.btrifact(M.unsqueeze(0))
-    #w = torch.btrisolve(Ya.unsqueeze(0), *M_LU)[0]
-
-    return w
-
-
-def tps_deform(grid, cpoints, tps_w):
-
-    # A : m x n
-    A = pairwise_radial_basis(grid, cpoints)
-
-    # Xa : m x 3
-    aux_ones = torch.ones(grid.size(0), 1).to(grid.device)
-    Xa = torch.cat([grid, aux_ones], 1)
-
-    ngrid = torch.mm(torch.cat([A, Xa], 1), tps_w)[:, :-1]
-
-    return ngrid
 
 def affine(img):
 
