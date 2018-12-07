@@ -21,15 +21,15 @@ def torch_morphological(img, kernel_size, mode='dilation'):
 
     # img : batches x 1 x h x w
     if mode == 'dilation':
-        img = F.max_pool2d(img, kernel_size=kernel_size, stride=1)
+        img = F.max_pool2d(img, kernel_size=kernel_size, stride=1, padding=kernel_size/2)
     if mode == 'erosion':
-        img = -F.max_pool2d(-img, kernel_size=kernel_size, stride=1)
+        img = -F.max_pool2d(-img, kernel_size=kernel_size, stride=1, padding=kernel_size/2)
     if mode == 'closing':
-        img = F.max_pool2d(img, kernel_size=kernel_size, stride=1)
-        img = -F.max_pool2d(-img, kernel_size=kernel_size, stride=1)
-    if mode == 'closing':
-        img = -F.max_pool2d(-img, kernel_size=kernel_size, stride=1)
-        img = F.max_pool2d(img, kernel_size=kernel_size, stride=1)
+        img = F.max_pool2d(img, kernel_size=kernel_size, stride=1, padding=kernel_size/2)
+        img = -F.max_pool2d(-img, kernel_size=kernel_size, stride=1, padding=kernel_size/2)
+    if mode == 'opening':
+        img = -F.max_pool2d(-img, kernel_size=kernel_size, stride=1, padding=kernel_size/2)
+        img = F.max_pool2d(img, kernel_size=kernel_size, stride=1, padding=kernel_size/2)
 
     return img
 
@@ -96,113 +96,44 @@ def tps_deform(grid, cpoints, tps_w):
 
     return ngrid
 
-def deform_old(img):
+def affine(img):
+
     h, w = img.size(2), img.size(3)
-    gh, gw = max(4, 1 + int(np.ceil(h / 32.0))), max(8, 1 + int(np.ceil(w / 64.0)))
     g = torch.stack([
-        torch.linspace(-1, 1, gw).view(1, -1).repeat(gh, 1),
-        torch.linspace(-1, 1, gh).view(-1, 1).repeat(1, gw),
+        torch.linspace(-w/2, w/2, w).view(1, -1).repeat(h, 1),
+        torch.linspace(-h/2, h/2, h).view(-1, 1).repeat(1, w),
     ], 2)
 
-    scale = np.random.uniform(.9, 1.1)
-    x_prop = np.random.uniform(.9, 1.1)
-    rotate = np.deg2rad(np.random.uniform(-5, 5))
-    slant = np.random.uniform(-.10, .10)
+    scale = 1 #np.random.uniform(.9, 1.1)
+    x_prop = 1 #np.random.uniform(.9, 1.1)
+    rotate = np.deg2rad(2 * np.random.randn())
+    slant = np.random.randn()
 
     # ng = ng + .05 * torch.randn(ng.size())
     ng = scale * g
-    ng[:, :, 0] = x_prop * ng[:, :, 0] + (.5 / gw * scale) * torch.randn((gh, gw))
-    ng[:, :, 1] = ng[:, :, 1] + (.5 / gh * scale) * torch.randn((gh, gw))
-
-    ng[:, :, 0] = ng[:, :, 0] + slant * ng[:, :, 1]
+    ng[:, :, 0] = x_prop * ng[:, :, 0]
+    ng[:, :, 0] = ng[:, :, 0] + slant * 40 * ng[:, :, 1] / h
 
     R = torch.from_numpy(
         np.asarray([np.cos(rotate), -np.sin(rotate), np.sin(rotate), np.cos(rotate)])).float().view(2, 2)
     ng = torch.mm(ng.view(-1, 2), R).view_as(g)
+    ng[:, :, 0] = 2 * ng[:, :, 0] / w
+    ng[:, :, 1] = 2 * ng[:, :, 1] / h
 
-    # ng = (scale * ng)
-    tps_w = tps_parameters(ng.view(-1, 2), g.view(-1, 2))
-
-    #h, w = 8 * (int(round(1.2 * scale * template.size(1))) / 8), 8 * (int(round(1.2 * scale * template.size(2))) / 8)
-
-    dscale = 4
-    ig = torch.stack([
-        torch.linspace(- 1.0, 1.0, w/dscale).view(1, -1).repeat(h/dscale, 1),
-        torch.linspace(- 1.0, 1.0, h/dscale).view(-1, 1).repeat(1, w/dscale),
-    ], 2).to(img.device)
-    nig = tps_deform(ig.view(-1, 2), ng.view(-1, 2).to(img.device), tps_w.to(img.device)).view_as(ig)
-    nig = F.upsample_bilinear(nig.unsqueeze(0).permute(3, 0, 1, 2), (h, w)).permute(1, 2, 3, 0)
-
-    nimg = F.grid_sample(img, nig, padding_mode='border')
+    nimg = F.grid_sample(img, ng.unsqueeze(0).to(img.device), padding_mode='border')
 
     return nimg
 
-def deform(img, alpha=1.0):
-    h, w = img.size(2), img.size(3)
-    gh, gw = max(5, int(np.ceil(h / 32.0))), max(9, int(np.ceil(w / 32.0)))
-    gh, gw = 2 * (gh/2) +1, 2* (gw/2) + 1
-    ws = torch.linspace(-1, 1, gw+1)
-    ws = .5*(ws[1:] + ws[:-1])
-    hs = torch.linspace(-1, 1, gh + 1)
-    hs = .5 * (hs[1:] + hs[:-1])
-    g = torch.stack([
-        ws.view(1, -1).repeat(gh, 1),
-        hs.view(-1, 1).repeat(1, gw),
-    ], 2)
-
-    scale = 1.0 #np.random.uniform(.9, 1.1)
-    x_prop = 1.0 #np.random.uniform(.9, 1.1)
-
-    # smoothed changes
-
-    ww = torch.Tensor([.25, .5, 1.0, .5, .25])
-    #angle
-    x_a = 5 * F.conv2d(torch.randn((1, gw)).view((1, 1, 1, gw)), ww.view(1, 1, 1, -1)/ww.sum(), padding=(0, len(ww)/2)).view(1, gw)
-    #translation
-    x_t = 2 * F.conv2d(1 - 2 * torch.rand((1, gw)).view((1, 1, 1, gw)), ww.view(1, 1, 1, -1)/ww.sum(), padding=(0, len(ww)/2)).view(1, gw)
-    ytmp = torch.linspace(-1, 1, gh)
-    dx = []
-    for i in range(gh):
-        dx += [x_t + ytmp[i] * x_a]
-    dx = torch.cat(dx, 0)
-
-    x_t = 2 * F.conv2d(torch.randn((1, gw)).view((1, 1, 1, gw)), ww.view(1, 1, 1, -1) / ww.sum(),
-                       padding=(0, len(ww) / 2)).view(1, gw)
-    #y_base = F.conv2d(torch.randn((gh, 1)).view((1, 1, gh, 1)), torch.ones((1, 1, 3, 1)) / 3, padding=(1, 0)).view(gh, 1)
-    dy = []
-    for i in range(gh):
-        dy += [x_t]
-    dy = torch.cat(dy, 0)
-
-    #dx = F.conv2d(torch.randn((gh, gw)).view((1, 1, gh, gw)), torch.ones((1, 1, 3, 3))/9, padding=1).squeeze()
-    #dy = F.conv2d(torch.randn((gh, gw)).view((1, 1, gh, gw)), torch.ones((1, 1, 3, 3))/9, padding=1).squeeze()
-    ng = scale * g
-    ng[:, :, 0] = x_prop * ng[:, :, 0] + (alpha / gw) * dx
-    ng[:, :, 1] = ng[:, :, 1] + (alpha / gh * scale) * dy
-
-    tps_w = tps_parameters(ng.view(-1, 2), g.view(-1, 2))
-
-    dscale = 4
-    ig = torch.stack([
-        torch.linspace(- 1.0, 1.0, w/dscale).view(1, -1).repeat(h/dscale, 1),
-        torch.linspace(- 1.0, 1.0, h/dscale).view(-1, 1).repeat(1, w/dscale),
-    ], 2).to(img.device)
-    nig = tps_deform(ig.view(-1, 2), ng.view(-1, 2).to(img.device), tps_w.to(img.device)).view_as(ig)
-    nig = F.upsample_bilinear(nig.unsqueeze(0).permute(3, 0, 1, 2), (h, w)).permute(1, 2, 3, 0)
-
-    nimg = F.grid_sample(img, nig, padding_mode='border')
-
-    return nimg
 
 def torch_augm(img):
 
     # kernel radius
-    r = np.random.randint(0, 3)
+    r = np.random.randint(0, 2)
     if r > 0:
         mode = np.random.choice(['dilation', 'erosion', 'opening', 'closing'])
         img = torch_morphological(img, 2*r+1, mode)
 
-    img = deform(img, np.random.uniform(.5, 1.0))
+    img = affine(img)
 
     return img.detach()
 
