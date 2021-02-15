@@ -143,6 +143,7 @@ def test(epoch):
 
     logger.info('Testing at epoch %d', epoch)
     cer, wer = [], []
+    cntc, cntw = 0, 0
     for (img, transcr) in test_loader:
         transcr = transcr[0]
         img = Variable(img.cuda(gpu_id))
@@ -151,14 +152,16 @@ def test(epoch):
         tdec = o.argmax(2).permute(1, 0).cpu().numpy().squeeze()
         tt = [v for j, v in enumerate(tdec) if j == 0 or v != tdec[j - 1]]
         dec_transcr = ''.join([icdict[t] for t in tt]).replace('_', '')
-        #tdec, _, _, tdec_len = decoder.decode(o.softmax(2).permute(1, 0, 2))
-        #dec_transcr = ''.join([icdict[t.item()] for t in tdec[0, 0][:tdec_len[0, 0].item()]])
 
-        cer += [float(editdistance.eval(dec_transcr, transcr))/ len(transcr)]
-        wer += [float(editdistance.eval(dec_transcr.split(' '), transcr.split(' '))) / len(transcr.split(' '))]
+        cc = float(editdistance.eval(dec_transcr, transcr))
+        ww = float(editdistance.eval(dec_transcr.split(' '), transcr.split(' ')))
+        cntc += len(transcr)
+        cntw +=  len(transcr.split(' '))
+        cer += [cc]
+        wer += [ww]
 
-    logger.info('CER at epoch %d: %f', epoch, sum(cer) / len(cer))
-    logger.info('WER at epoch %d: %f', epoch, sum(wer) / len(wer))
+    logger.info('CER at epoch %d: %f', epoch, sum(cer) / cntc)
+    logger.info('WER at epoch %d: %f', epoch, sum(wer) / cntw)
 
 
     net.train()
