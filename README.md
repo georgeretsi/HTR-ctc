@@ -1,6 +1,8 @@
 # HTR-ctc
 Pytorch implementation of Handwritten Text Recognition using CTC loss on IAM dataset. 
 
+**A newer updated version of this repo can be found [here](https://github.com/georgeretsi/HTR-best-practices) using the built-in pytorch ctc loss and extra modules.**
+
 Selected Features:
 * Dataset is saved in a '.pt' file after the initial preprocessing for faster loading operations
 * Loader can handle both word and line-level segmentation of words (change loader parameters in train_htr.py). <br>
@@ -25,5 +27,8 @@ Example: <br>
 
 
 **Note:** Local paths of IAM dataset (https://fki.tic.heia-fr.ch/databases/iam-handwriting-database) are hardcoded in iam_data_loader/iam_config.py
+
+The initial code was developed for the split dubbed as IAM-C (see this [paper](https://arxiv.org/pdf/1903.07377.pdf) and this [repo](https://github.com/shonenkov/IAM-Splitting) for more details)
+
 
 **Developed with Pytorch 0.4.1 and warpctc_pytorch lib (https://github.com/SeanNaren/warp-ctc) <br> A newer version is coming with the build-in CTC loss of Pytorch (>1.0)** 
